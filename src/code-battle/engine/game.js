@@ -135,6 +135,8 @@ export function createGame(opts = {}) {
       codeOkSeen: false,
       battleStarted: false,
     },
+    hasAttackedThisTurn: false,
+    enemyReport: [],
     lastFx: null,
   };
 }
@@ -428,6 +430,11 @@ export function executeCode(game, sideKey, slot, index = 0) {
 
 export function attack(game, attackIndex) {
   if (game.phase !== "player") return game;
+  if (game.hasAttackedThisTurn) {
+    pushLog(game, "このターンはもう攻撃済み。ターン終了してね");
+    game.lesson = "攻撃は1ターンに1回 → ターン終了";
+    return game;
+  }
   const side = game.player;
   const foe = game.enemy;
   if (!side.active || !foe.active) {
@@ -453,6 +460,7 @@ export function attack(game, attackIndex) {
   target.hp = Math.max(0, target.hp - dmg);
   pushLog(game, `${def.name}「${atk.name}」→ ${dmg}`);
   game.flags.attacked = true;
+  game.hasAttackedThisTurn = true;
   game.lastFx = {
     type: "attack",
     amount: dmg,
@@ -460,7 +468,9 @@ export function attack(game, attackIndex) {
     toSide: "enemy",
   };
   checkKnockout(game, foe, target);
-  if (game.phase === "player") game.lesson = "ターン終了へ";
+  if (game.phase === "player") {
+    game.lesson = "攻撃完了！ターン終了を押して";
+  }
   return game;
 }
 
@@ -484,13 +494,16 @@ export function promoteBench(game, benchIndex) {
 export function beginPlayerTurn(game) {
   if (game.phase === "win" || game.phase === "lose") return game;
   game.phase = "player";
+  game.hasAttackedThisTurn = false;
   const n = game.turn === 1 ? 0 : 3;
   if (n > 0) {
     const got = drawCards(game.player, n);
     pushLog(game, `ターン${game.turn}: ${got.length}枚ドロー`);
     game.lastFx = { type: "draw", n: got.length };
   } else pushLog(game, `ターン${game.turn}`);
-  game.lesson = "コードを組んで実行、そして攻撃";
+  game.lesson = game.enemyReport?.length
+    ? "相手の行動を確認 → コード／攻撃"
+    : "コードを組んで実行、攻撃は1回";
   return game;
 }
 
@@ -536,30 +549,50 @@ function ensureEnemySetup(game) {
 function runEnemyTurn(game) {
   const side = game.enemy;
   const foe = game.player;
+  const report = [];
   drawCards(side, 3);
+
   if (!side.active) {
     const ch = side.hand.find((c) => c.type === "character");
-    if (ch) side.active = takeFromHand(side, ch.uid);
-    else {
+    if (ch) {
+      side.active = takeFromHand(side, ch.uid);
+      report.push(`${getCardDef(side.active.defId).name} をバトルに出した`);
+    } else {
       const bi = side.bench.findIndex(Boolean);
       if (bi >= 0) {
         side.active = side.bench[bi];
         side.bench[bi] = null;
+        report.push(`${getCardDef(side.active.defId).name} がベンチから登場`);
       }
     }
   }
-  if (!side.active || !foe.active) return;
+  if (!side.active || !foe.active) {
+    game.enemyReport = report.length ? report : ["相手は何もしなかった"];
+    return;
+  }
 
   const lv = game.aiLevel || 1;
-  // 低レベルは単純攻撃多め、高レベルはコードを組む
-  if (lv >= 3) tryBuildAndExecute(game, side, ["damage", "enemy", "30"]);
-  if (lv >= 8) tryBuildAndExecute(game, side, ["boost", "self", "20"]);
+  const name = getCardDef(side.active.defId).name;
+
+  const tryCode = (recipe, label) => {
+    const ok = tryBuildAndExecute(game, side, recipe);
+    if (ok) report.push(`${name} がコード実行「${label}」`);
+    return ok;
+  };
+
+  if (lv >= 3) tryCode(["damage", "enemy", "30"], "damage enemy 30");
+  if (lv >= 8) tryCode(["boost", "self", "20"], "boost self 20");
   if (lv >= 12 && side.active.hp < side.active.maxHp * 0.5) {
-    tryBuildAndExecute(game, side, ["heal", "self", "30"]);
+    tryCode(["heal", "self", "30"], "heal self 30");
   }
-  if (lv >= 18) tryBuildAndExecute(game, side, ["damage", "enemy", "50"]);
+  if (lv >= 18) tryCode(["damage", "enemy", "50"], "damage enemy 50");
   if (lv >= 22) {
-    tryBuildAndExecute(game, side, ["if", "HP", "<", "50", "then", "heal", "self", "30"]);
+    tryCode(["if", "HP", "<", "50", "then", "heal", "self", "30"], "if HP < 50 then heal…");
+  }
+
+  if (!side.active || !foe.active) {
+    game.enemyReport = report;
+    return;
   }
 
   const def = getCardDef(side.active.defId);
@@ -575,9 +608,14 @@ function runEnemyTurn(game) {
     dmg -= blocked;
   }
   target.hp = Math.max(0, target.hp - dmg);
-  pushLog(game, `AI ${def.name}「${atk.name}」→ ${dmg}`);
+  const targetName = getCardDef(target.defId).name;
+  report.push(`${name} の「${atk.name}」→ ${targetName} に ${dmg} ダメージ`);
+  pushLog(game, report[report.length - 1]);
   game.lastFx = { type: "attack", amount: dmg, fromSide: "enemy", toSide: "player" };
   checkKnockout(game, foe, target);
+  if (target.hp <= 0) report.push(`${targetName} がダウンした`);
+
+  game.enemyReport = report;
 }
 
 function tryBuildAndExecute(game, side, recipe) {

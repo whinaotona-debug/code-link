@@ -35,6 +35,7 @@ import {
   resetProgress,
 } from "./progress.js";
 import { getMultiplayerStatus } from "./firebase/multiplayer.js";
+import { listCraftable } from "./data/recipes.js";
 import { showCoach, hideCoach, refreshCoachSpotlight } from "./ui/coach.js";
 
 const app = document.getElementById("app");
@@ -96,20 +97,19 @@ function fieldCharHtml(char, side, slot, index) {
   const st = getSlotCodeStatus(game, side === "player" ? "player" : "enemy", slot, index);
   const pct = Math.max(0, Math.round((char.hp / char.maxHp) * 100));
   const prog = st.tokens?.length ? `<div class="program-line">${escapeHtml(st.tokens.join(" "))}</div>` : "";
-  const hint =
-    st.tokens?.length && !st.ok
-      ? `<div class="program-line dim">${escapeHtml(st.hint || st.error || "")}</div>`
-      : "";
+  const compact = slot === "bench";
+  const art = compact
+    ? artForDef(def, { w: 56, h: 44 })
+    : artForDef(def, { w: 72, h: 58 });
   return `
-    <div class="char-card" data-uid="${char.uid}" data-side="${side}" data-slot="${slot}" data-index="${index}" style="border-color:${def.color}">
+    <div class="char-card ${compact ? "compact" : ""}" data-uid="${char.uid}" data-side="${side}" data-slot="${slot}" data-index="${index}" style="border-color:${def.color}">
       ${statusDot(st)}
-      <div class="art-wrap">${artForDef(def, { w: 110, h: 90 })}</div>
+      <div class="art-wrap">${art}</div>
       <div class="name">${escapeHtml(def.name)}</div>
       <div class="hp">HP ${char.hp}/${char.maxHp}${char.shield ? ` ·盾${char.shield}` : ""}${char.boost ? ` ·+${char.boost}` : ""}${char.charged ? " ·⚡" : ""}</div>
       <div class="hp-bar"><i style="width:${pct}%"></i></div>
-      <div class="badges"><span class="badge">${escapeHtml(def.role)}</span></div>
       ${codeStrip(char.code)}
-      ${prog}${hint}
+      ${prog}
     </div>`;
 }
 
@@ -118,16 +118,49 @@ function handCardHtml(card) {
   const sel = game.selectedHandUid === card.uid ? " selected" : "";
   if (card.type === "character") {
     return `<button type="button" class="hand-card char${sel}" data-hand="${card.uid}" data-kind="char">
-      <div class="art-wrap mini">${artForDef(def, { w: 86, h: 70 })}</div>
+      <div class="art-wrap mini">${artForDef(def, { w: 64, h: 48 })}</div>
       <div class="t">${escapeHtml(def.name)}</div>
       <div class="sub">HP${def.hp}</div>
     </button>`;
   }
   return `<button type="button" class="hand-card code${sel}" data-hand="${card.uid}" data-kind="code" data-token="${escapeHtml(def.token)}" style="border-top-color:${def.color}">
-    <div class="art-wrap mini">${artForDef(def, { w: 86, h: 56 })}</div>
     <div class="token" style="color:${def.color}">${escapeHtml(def.token)}</div>
     <div class="sub">${escapeHtml(def.tip)}</div>
   </button>`;
+}
+
+function availableCodeTokens() {
+  const tokens = [];
+  for (const c of game.player.hand) {
+    if (c.type === "code") tokens.push(getCardDef(c.defId).token);
+  }
+  if (game.player.active) {
+    for (const c of game.player.active.code) tokens.push(getCardDef(c.defId).token);
+  }
+  for (const c of game.player.supportCode) tokens.push(getCardDef(c.defId).token);
+  return tokens;
+}
+
+function renderCraftHints() {
+  const el = document.getElementById("craftHints");
+  if (!el || !game) return;
+  const list = listCraftable(availableCodeTokens());
+  const ready = list.filter((r) => r.ready);
+  const almost = list.filter((r) => !r.ready && r.almost);
+  if (!ready.length && !almost.length) {
+    el.innerHTML = `<span class="craft-empty">組めるコードなし（damage + enemy + 数値 など）</span>`;
+    return;
+  }
+  el.innerHTML = [
+    ...ready.map(
+      (r) =>
+        `<button type="button" class="craft-chip ready" data-craft="${escapeHtml(r.short)}" title="${escapeHtml(r.short)}">✓ ${escapeHtml(r.label)}</button>`
+    ),
+    ...almost.slice(0, 3).map(
+      (r) =>
+        `<span class="craft-chip almost" title="足りない: ${escapeHtml(r.missing.join(", "))}">△ ${escapeHtml(r.label)}</span>`
+    ),
+  ].join("");
 }
 
 function consumeFx() {
@@ -235,6 +268,22 @@ function renderBattle() {
   }
   document.getElementById("enemyName").textContent = e.name;
 
+  const reportEl = document.getElementById("enemyReport");
+  if (reportEl) {
+    if (g.enemyReport?.length && g.phase === "player" && g.turn > 1) {
+      reportEl.hidden = false;
+      reportEl.innerHTML = `<strong>相手の行動</strong>${g.enemyReport
+        .map((line) => `<div>${escapeHtml(line)}</div>`)
+        .join("")}`;
+    } else if (g.phase === "setup") {
+      reportEl.hidden = false;
+      reportEl.innerHTML = `<strong>準備</strong><div>モンスターを出して「開始！」</div>`;
+    } else {
+      reportEl.hidden = true;
+      reportEl.innerHTML = "";
+    }
+  }
+
   document.getElementById("enemyActive").innerHTML = fieldCharHtml(e.active, "enemy", "active", 0);
   document.getElementById("enemyBench").innerHTML = benchHtml(e, "enemy");
   document.getElementById("supportSlot").innerHTML = supportHtml(p);
@@ -243,27 +292,34 @@ function renderBattle() {
   markFocus();
 
   document.getElementById("handCount").textContent =
-    `手札${p.hand.length} · 山${p.deck.length} · 捨${p.trash.length}`;
+    `手札${p.hand.length} · 山${p.deck.length}`;
   document.getElementById("handCards").innerHTML = p.hand.map(handCardHtml).join("");
-  document.getElementById("logBox").innerHTML = g.log
-    .slice(0, 8)
-    .map((l) => `<div>${escapeHtml(l)}</div>`)
-    .join("");
+  renderCraftHints();
 
   const canAct = g.phase === "player" || g.phase === "setup";
+  const canAttack =
+    canAct && g.phase !== "setup" && p.active && !g.hasAttackedThisTurn;
   document.getElementById("btnStart").hidden = g.phase !== "setup";
   document.getElementById("btnEnd").disabled = g.phase !== "player";
-  document.getElementById("btnAttack0").disabled = !canAct || g.phase === "setup" || !p.active;
-  document.getElementById("btnAttack1").disabled = !canAct || g.phase === "setup" || !p.active;
+  document.getElementById("btnAttack0").disabled = !canAttack;
+  document.getElementById("btnAttack1").disabled = !canAttack;
   document.getElementById("btnExec").disabled = !canAct || g.phase === "setup";
   document.getElementById("btnPop").disabled = !canAct;
 
   if (p.active) {
     const def = getCardDef(p.active.defId);
-    document.getElementById("btnAttack0").textContent = def.attacks[0].name;
+    document.getElementById("btnAttack0").textContent = g.hasAttackedThisTurn
+      ? `${def.attacks[0].name}✓`
+      : def.attacks[0].name;
     document.getElementById("btnAttack1").textContent = def.attacks[1]
-      ? `${def.attacks[1].name}${p.active.charged ? "" : "🔒"}`
+      ? `${def.attacks[1].name}${p.active.charged ? "" : "🔒"}${g.hasAttackedThisTurn ? "✓" : ""}`
       : "—";
+  }
+
+  if (g.hasAttackedThisTurn && g.phase === "player") {
+    document.getElementById("btnEnd").classList.add("pulse-end");
+  } else {
+    document.getElementById("btnEnd").classList.remove("pulse-end");
   }
 
   // チュートリアル（スポットライト）
@@ -544,11 +600,12 @@ function boot() {
         <button type="button" class="btn btn-ghost btn-sm" id="btnTitle">メニュー</button>
       </div>
       <div class="lesson" id="lesson"></div>
+      <div class="enemy-report" id="enemyReport" hidden></div>
 
       <div class="board">
         <div class="enemy-row field">
           <div class="zone-block">
-            <div class="slot-label">相手バトル</div>
+            <div class="slot-label">相手</div>
             <div class="zone" id="enemyActive"></div>
             <div class="bench-row" id="enemyBench"></div>
           </div>
@@ -556,13 +613,14 @@ function boot() {
         <div class="player-row field">
           <div class="support-slot" id="supportSlot"></div>
           <div class="zone-block">
-            <div class="slot-label">自分バトル</div>
+            <div class="slot-label">自分</div>
             <div class="zone" id="playerActiveZone"><div id="playerActive"></div></div>
             <div class="bench-row" id="playerBench"></div>
           </div>
         </div>
-        <div class="log-box" id="logBox"></div>
       </div>
+
+      <div class="craft-hints" id="craftHints"></div>
 
       <div class="hand-area">
         <div class="hand-toolbar">
