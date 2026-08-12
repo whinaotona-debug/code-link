@@ -808,27 +808,41 @@ body {
 }
 
 /* —— Coach / Tutorial spotlight —— */
+html.coach-open,
+body.coach-open {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  height: 100%;
+  max-height: 100dvh;
+}
+
 #coach {
   position: fixed;
   inset: 0;
   z-index: 90;
   pointer-events: none;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  max-width: 100vw;
+  max-height: 100dvh;
 }
 #coach[hidden] {
   display: none !important;
 }
-.coach-dim {
-  display: none;
-}
 .coach-hole {
   position: fixed;
   border-radius: 12px;
-  box-shadow: 0 0 0 999vmax rgba(10, 18, 24, 0.78);
+  /* vmax はモバイルで横スクロールの原因になるので大きめ px に制限 */
+  box-shadow: 0 0 0 100vh rgba(10, 18, 24, 0.78);
   outline: 2px solid rgba(20, 184, 166, 0.95);
   outline-offset: 2px;
   pointer-events: none;
-  transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease;
+  transition: left 0.18s ease, top 0.18s ease, width 0.18s ease, height 0.18s ease;
   z-index: 91;
+  max-width: calc(100vw - 12px);
+  max-height: 42dvh;
   animation: coachPulse 1.6s ease-in-out infinite;
 }
 @keyframes coachPulse {
@@ -844,32 +858,44 @@ body {
 .coach-panel {
   position: fixed;
   left: 50%;
-  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
-  width: min(420px, calc(100vw - 24px));
+  width: min(420px, calc(100vw - 20px));
+  max-width: calc(100vw - 20px);
+  max-height: min(38dvh, 240px);
+  overflow: auto;
   background: #fffaf3;
   color: var(--ink);
   border-radius: 14px;
-  padding: 0.9rem 1rem 1rem;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  padding: 0.75rem 0.85rem 0.85rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   pointer-events: auto;
   z-index: 93;
   animation: cardPop 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  -webkit-overflow-scrolling: touch;
+}
+.coach-panel-bottom {
+  top: auto;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
 }
 .coach-panel-top {
   bottom: auto;
-  top: calc(12px + env(safe-area-inset-top, 0px));
+  top: calc(10px + env(safe-area-inset-top, 0px));
+}
+.coach-panel-mid {
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
 }
 .coach-progress {
   font-family: var(--font-code);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--teal);
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.3rem;
 }
 .coach-text {
-  margin: 0 0 0.75rem;
-  font-size: 0.95rem;
-  line-height: 1.45;
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
   font-weight: 600;
 }
 .coach-actions {
@@ -877,7 +903,32 @@ body {
   justify-content: flex-end;
 }
 .coach-actions .btn {
-  min-width: 120px;
+  min-width: 110px;
+  padding: 0.65rem 1rem;
+}
+
+@media (max-width: 700px) {
+  .coach-panel {
+    max-height: min(32dvh, 200px);
+    padding: 0.65rem 0.75rem 0.75rem;
+  }
+  .coach-text {
+    font-size: 0.82rem;
+  }
+  .coach-hole {
+    max-height: 34dvh;
+    border-radius: 10px;
+  }
+  /* チュートリアル中は下部手札がパネルと被らないよう少し縮める */
+  body.coach-open .battle-screen {
+    padding-bottom: 0;
+  }
+  body.coach-open .hand-area {
+    max-height: 28dvh;
+  }
+  body.coach-open .hand-scroll {
+    min-height: 96px;
+  }
 }
 
 .overlay.hidden {
