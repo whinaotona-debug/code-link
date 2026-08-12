@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ピタゴラメーカー</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="c"></canvas>
+      <div class="hud">
+        <header class="hud-top">
+          <div class="brand">ピタゴラメーカー</div>
+          <div class="top-right">
+            <div class="view-toggle" role="group" aria-label="表示モード">
+              <button type="button" class="view-btn active" data-view="2d">2D</button>
+              <button type="button" class="view-btn" data-view="3d">3D</button>
+            </div>
+            <div class="mode" id="modeLabel">編集 · 2D</div>
+          </div>
+        </header>
+
+        <aside class="toolbar">
+          <p class="label">ツール</p>
+          <div class="tool-grid" id="toolGrid"></div>
+
+          <div id="gizmoPanel" class="gizmo-panel">
+            <p class="label">ギズモ</p>
+            <div class="row triple-gizmo">
+              <button type="button" class="gizmo-mode active" data-mode="translate">移動 W</button>
+              <button type="button" class="gizmo-mode" data-mode="rotate">回転 E</button>
+              <button type="button" class="gizmo-mode" data-mode="scale">大きさ R</button>
+            </div>
+            <button type="button" id="snapBtn" class="snap-btn active" title="移動・回転・拡大のスナップ">スナップ ON</button>
+            <div class="row triple">
+              <button type="button" id="scaleDown" title="全体を小さく">−</button>
+              <span id="scaleLabel">1×1×1</span>
+              <button type="button" id="scaleUp" title="全体を大きく">＋</button>
+            </div>
+            <p class="mini">R → 赤緑青の軸で伸ばす・細くする</p>
+            <p class="mini">Shift+クリックで複数選択</p>
+            <p class="mini">Ctrl+C/V/X/D ・ Ctrl+A全選択</p>
+            <p class="mini">Ctrl+Z 戻す · Ctrl+Shift+Z やり直し</p>
+            <p class="mini">S でスナップ ON/OFF</p>
+
+            <p class="label">整列</p>
+            <div class="align-grid" id="alignPanel">
+              <button type="button" data-align="x-min" title="X左揃え">X左</button>
+              <button type="button" data-align="x-center" title="X中央">X中</button>
+              <button type="button" data-align="x-max" title="X右揃え">X右</button>
+              <button type="button" data-align="y-min" title="Y下揃え">Y下</button>
+              <button type="button" data-align="y-center" title="Y中央">Y中</button>
+              <button type="button" data-align="y-max" title="Y上揃え">Y上</button>
+              <button type="button" data-align="z-min" title="Z奥揃え">Z奥</button>
+              <button type="button" data-align="z-center" title="Z中央">Z中</button>
+              <button type="button" data-align="z-max" title="Z手前揃え">Z前</button>
+            </div>
+
+            <button type="button" id="deleteBtn">選択を削除 Del</button>
+          </div>
+
+          <div id="placePanel" class="place-panel" hidden>
+            <p class="label">高さ（空中）</p>
+            <div class="row triple">
+              <button type="button" id="heightDown">−</button>
+              <span id="heightLabel">0.5m</span>
+              <button type="button" id="heightUp">＋</button>
+            </div>
+            <p class="mini">ホイールでも変更</p>
+          </div>
+
+          <div id="ropeHint" class="rope-hint" hidden>
+            <p class="mini">紐：1つ目のパーツ → 2つ目のパーツをクリックしてつなぐ</p>
+          </div>
+
+          <p class="label">操作</p>
+          <button type="button" class="primary" id="playBtn">▶ プレイ</button>
+          <button type="button" id="resetBtn">リセット</button>
+          <button type="button" id="clearBtn">全部消す</button>
+
+          <p class="hint" id="hintText"></p>
+        </aside>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
