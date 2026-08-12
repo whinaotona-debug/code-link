@@ -133,6 +133,7 @@ export function createGame(opts = {}) {
       executed: false,
       attacked: false,
       codeOkSeen: false,
+      battleStarted: false,
     },
     lastFx: null,
   };
@@ -516,6 +517,7 @@ export function startBattle(game) {
   ensureEnemySetup(game);
   game.phase = "player";
   beginPlayerTurn(game);
+  game.flags.battleStarted = true;
   game.lastFx = { type: "battle_start" };
   return game;
 }

@@ -618,7 +618,7 @@ body {
   padding: 1rem;
 }
 .overlay.hidden {
-  display: none;
+  display: none !important;
 }
 .modal {
   background: var(--paper);
@@ -805,4 +805,81 @@ body {
   .player-row.field {
     grid-template-columns: 64px 1fr;
   }
+}
+
+/* —— Coach / Tutorial spotlight —— */
+#coach {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+}
+#coach[hidden] {
+  display: none !important;
+}
+.coach-dim {
+  display: none;
+}
+.coach-hole {
+  position: fixed;
+  border-radius: 12px;
+  box-shadow: 0 0 0 999vmax rgba(10, 18, 24, 0.78);
+  outline: 2px solid rgba(20, 184, 166, 0.95);
+  outline-offset: 2px;
+  pointer-events: none;
+  transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease;
+  z-index: 91;
+  animation: coachPulse 1.6s ease-in-out infinite;
+}
+@keyframes coachPulse {
+  50% {
+    outline-color: rgba(253, 186, 116, 0.95);
+  }
+}
+.coach-spotlight {
+  position: relative;
+  z-index: 92 !important;
+  filter: brightness(1.08);
+}
+.coach-panel {
+  position: fixed;
+  left: 50%;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 24px));
+  background: #fffaf3;
+  color: var(--ink);
+  border-radius: 14px;
+  padding: 0.9rem 1rem 1rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+  z-index: 93;
+  animation: cardPop 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.coach-panel-top {
+  bottom: auto;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+}
+.coach-progress {
+  font-family: var(--font-code);
+  font-size: 0.72rem;
+  color: var(--teal);
+  margin-bottom: 0.35rem;
+}
+.coach-text {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+.coach-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.coach-actions .btn {
+  min-width: 120px;
+}
+
+.overlay.hidden {
+  display: none !important;
 }

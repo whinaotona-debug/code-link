@@ -9,40 +9,78 @@ export const TUTORIAL = {
   steps: [
     {
       id: "welcome",
-      text: "ようこそ！ここではカードを並べてプログラムを作り、モンスターを動かすよ。",
+      text: "コードリンクへようこそ。カードでプログラムを組んで、モンスターを動かそう。",
       wait: "tap",
+      nextLabel: "はじめる",
+    },
+    {
+      id: "pick_monster",
+      text: "① 手札の【モンスター】カードをタップして選ぶ",
+      require: "selectedChar",
+      spotlight: '#handCards .hand-card.char',
     },
     {
       id: "place_char",
-      text: "手札のモンスターを選んで、バトルゾーンに出そう。",
+      text: "② 光っている【自分バトル】をタップして出す",
       require: "hasActive",
+      spotlight: "#playerActiveZone",
     },
     {
-      id: "attach_code",
-      text: "コードカードを ダメージ → enemy → 30 の順でモンスターにつけよう。緑の丸が出たらOK！",
+      id: "start",
+      text: "③ 【開始！】を押してバトルスタート",
+      require: "battleStarted",
+      spotlight: "#btnStart",
+    },
+    {
+      id: "pick_damage",
+      text: "④ コード【damage】を選ぶ（ダメージを与える命令）",
+      require: "selectedToken:damage",
+      spotlight: '#handCards .hand-card.code',
+    },
+    {
+      id: "attach_damage",
+      text: "⑤ バトル中のモンスターにタップしてコードをつける",
+      require: "hasToken:damage",
+      spotlight: "#playerActiveZone",
+    },
+    {
+      id: "pick_enemy",
+      text: "⑥ つぎは【enemy】（相手）を選んでつける",
+      require: "hasToken:enemy",
+      spotlight: "#playerActiveZone",
+    },
+    {
+      id: "pick_30",
+      text: "⑦ 最後に数値【30】をつけて文章を完成。右上が緑●になればOK",
       require: "codeOk",
+      spotlight: "#playerActiveZone",
     },
     {
       id: "execute",
-      text: "「コード実行」を押そう。効果が発動してコードはトラッシュへ行くよ。",
+      text: "⑧ 【実行▶】を押す。プログラムが動いてコードは捨て札へ",
       require: "executed",
+      spotlight: "#btnExec",
     },
     {
       id: "attack",
-      text: "技ボタンで攻撃！相手のHPを削ろう。",
+      text: "⑨ 技ボタンで攻撃！相手のHPをゼロにしよう",
       require: "attacked",
+      spotlight: "#btnAttack0",
     },
     {
       id: "done",
-      text: "完璧！これで基本はクリア。次はAIとの連戦に挑戦だ。",
+      text: "クリア！基本操作はこれでOK。AI対戦に進もう。",
       wait: "tap",
+      nextLabel: "AI対戦へ",
+      finish: true,
     },
   ],
   playerDeck: TUTORIAL_DECK,
   enemyDeck: TUTORIAL_DECK,
-  enemyName: "練習用AI",
+  enemyName: "練習くん",
   aiLevel: 0,
-  pointsToWin: 1,
+  /** チュートリアル中は勝利判定を遅らせる（クリア画面で完了） */
+  pointsToWin: 99,
 };
 
 function enemyNameForLevel(lv) {
@@ -62,7 +100,6 @@ function enemyNameForLevel(lv) {
 }
 
 function deckForLevel(lv) {
-  // レベルが上がるほど強いモンスター比率を上げる
   const pool = CHARACTERS.map((c) => c.id);
   const strong = pool.slice(Math.min(3, pool.length - 1));
   const deck = [...STARTER_DECK];
@@ -75,7 +112,6 @@ function deckForLevel(lv) {
   return deck;
 }
 
-/** Lv1〜30 */
 export const CAMPAIGN_LEVELS = Array.from({ length: 30 }, (_, i) => {
   const lv = i + 1;
   return {
@@ -87,9 +123,7 @@ export const CAMPAIGN_LEVELS = Array.from({ length: 30 }, (_, i) => {
     playerDeck: STARTER_DECK,
     enemyDeck: deckForLevel(lv),
     aiLevel: lv,
-    /** AIモンスターのHP倍率 */
     enemyHpScale: 1 + (lv - 1) * 0.04,
-    /** AIダメージ倍率 */
     enemyDmgScale: 1 + (lv - 1) * 0.03,
     pointsToWin: lv >= 25 ? 3 : lv >= 10 ? 2 : 1,
     rewardHint: lv % 5 === 0 ? "ボス戦" : null,

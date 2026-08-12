@@ -35,6 +35,7 @@ import {
   resetProgress,
 } from "./progress.js";
 import { getMultiplayerStatus } from "./firebase/multiplayer.js";
+import { showCoach, hideCoach, refreshCoachSpotlight } from "./ui/coach.js";
 
 const app = document.getElementById("app");
 
@@ -116,13 +117,13 @@ function handCardHtml(card) {
   const def = getCardDef(card.defId);
   const sel = game.selectedHandUid === card.uid ? " selected" : "";
   if (card.type === "character") {
-    return `<button type="button" class="hand-card char${sel}" data-hand="${card.uid}">
+    return `<button type="button" class="hand-card char${sel}" data-hand="${card.uid}" data-kind="char">
       <div class="art-wrap mini">${artForDef(def, { w: 86, h: 70 })}</div>
       <div class="t">${escapeHtml(def.name)}</div>
       <div class="sub">HP${def.hp}</div>
     </button>`;
   }
-  return `<button type="button" class="hand-card code${sel}" data-hand="${card.uid}" style="border-top-color:${def.color}">
+  return `<button type="button" class="hand-card code${sel}" data-hand="${card.uid}" data-kind="code" data-token="${escapeHtml(def.token)}" style="border-top-color:${def.color}">
     <div class="art-wrap mini">${artForDef(def, { w: 86, h: 56 })}</div>
     <div class="token" style="color:${def.color}">${escapeHtml(def.token)}</div>
     <div class="sub">${escapeHtml(def.tip)}</div>
@@ -159,6 +160,8 @@ function consumeFx() {
 }
 
 function renderTitle() {
+  hideResultOverlay();
+  hideCoach();
   showScreen("screen-title");
   const p = loadProgress();
   const mp = getMultiplayerStatus();
@@ -173,6 +176,8 @@ function renderTitle() {
 }
 
 function renderCampaign() {
+  hideResultOverlay();
+  hideCoach();
   showScreen("screen-campaign");
   const p = loadProgress();
   const grid = document.getElementById("levelGrid");
@@ -221,7 +226,13 @@ function renderBattle() {
   document.getElementById("turnLabel").textContent = `T${g.turn}`;
   document.getElementById("pointsLabel").textContent = `${p.points}-${e.points}`;
   document.getElementById("phaseLabel").textContent = phaseText(g.phase);
-  document.getElementById("lesson").textContent = g.lesson || "";
+  const lessonEl = document.getElementById("lesson");
+  if (g.tutorial) {
+    lessonEl.hidden = true;
+  } else {
+    lessonEl.hidden = false;
+    lessonEl.textContent = g.lesson || "";
+  }
   document.getElementById("enemyName").textContent = e.name;
 
   document.getElementById("enemyActive").innerHTML = fieldCharHtml(e.active, "enemy", "active", 0);
@@ -255,30 +266,23 @@ function renderBattle() {
       : "—";
   }
 
-  // チュートリアルガイド
+  // チュートリアル（スポットライト）
   const tip = document.getElementById("tutorialTip");
-  if (g.tutorial) {
-    tip.hidden = false;
-    const step = TUTORIAL.steps[tutorialStep];
-    tip.querySelector(".tip-text").textContent = step?.text || "";
-    updateTutorialGate();
-  } else {
-    tip.hidden = true;
-  }
+  if (tip) tip.hidden = true;
 
   const overlay = document.getElementById("resultOverlay");
-  if (g.phase === "win" || g.phase === "lose") {
+  if (g.tutorial) {
+    // チュートリアル中は勝利モーダルを出さない（コーチで完了）
+    overlay.classList.add("hidden");
+  } else if (g.phase === "win" || g.phase === "lose") {
     overlay.classList.remove("hidden");
     const win = g.phase === "win";
     document.getElementById("resultTitle").textContent = win ? "勝利！" : "敗北…";
     document.getElementById("resultMsg").textContent = win
-      ? g.tutorial
-        ? "チュートリアルクリア！"
-        : `レベル ${g.campaignLevel} クリア！`
+      ? `レベル ${g.campaignLevel} クリア！`
       : "もう一度挑戦しよう";
     if (!g._progressSaved) {
       g._progressSaved = true;
-      if (win && g.tutorial) completeTutorial();
       if (win && g.campaignLevel) completeLevel(g.campaignLevel);
       if (!win && g.campaignLevel) recordLoss();
     }
@@ -286,23 +290,132 @@ function renderBattle() {
     overlay.classList.add("hidden");
   }
 
-  requestAnimationFrame(consumeFx);
+  requestAnimationFrame(() => {
+    consumeFx();
+    syncCoach();
+    refreshCoachSpotlight();
+  });
 }
 
-function updateTutorialGate() {
-  if (!game?.tutorial) return;
-  const step = TUTORIAL.steps[tutorialStep];
-  if (!step) return;
-  if (step.require === "hasActive" && game.player.active) advanceTutorial();
-  if (step.require === "codeOk" && game.flags.codeOkSeen) advanceTutorial();
-  if (step.require === "executed" && game.flags.executed) advanceTutorial();
-  if (step.require === "attacked" && game.flags.attacked) advanceTutorial();
+function hideResultOverlay() {
+  const overlay = document.getElementById("resultOverlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+function leaveBattleTo(mode) {
+  hideResultOverlay();
+  hideCoach();
+  game = null;
+  currentMode = mode;
+  if (mode === "title") renderTitle();
+  else if (mode === "campaign") renderCampaign();
+}
+
+function syncCoach() {
+  if (!game?.tutorial) {
+    hideCoach();
+    return;
+  }
+  const steps = TUTORIAL.steps;
+  let step = steps[tutorialStep];
+  if (!step) {
+    hideCoach();
+    return;
+  }
+
+  let guard = 0;
+  while (step?.require && checkTutorialRequire(step.require) && guard < 12) {
+    advanceTutorial();
+    step = steps[tutorialStep];
+    guard += 1;
+  }
+  if (!step) {
+    hideCoach();
+    return;
+  }
+
+  const sel = resolveSpotlight(step);
+
+  showCoach({
+    text: step.text,
+    selector: sel,
+    step: tutorialStep + 1,
+    total: steps.length,
+    showNext: step.wait === "tap" || step.finish,
+    nextLabel: step.nextLabel || (step.finish ? "AI対戦へ" : "つぎへ"),
+    onNext: () => {
+      if (step.finish) {
+        completeTutorial();
+        leaveBattleTo("campaign");
+        return;
+      }
+      advanceTutorial();
+      renderBattle();
+    },
+  });
+}
+
+function resolveSpotlight(step) {
+  if (step.require?.startsWith("selectedToken:")) {
+    const tok = step.require.split(":")[1];
+    return `#handCards .hand-card[data-token="${tok}"]`;
+  }
+  if (step.id === "pick_monster") return "#handCards .hand-card.char";
+  if (step.id === "pick_damage") return '#handCards .hand-card[data-token="damage"]';
+
+  if (step.id === "pick_enemy" || step.id === "pick_30") {
+    const need = step.id === "pick_enemy" ? "enemy" : "30";
+    const selected = game.player.hand.find((x) => x.uid === game.selectedHandUid);
+    const selectedOk =
+      selected?.type === "code" && getCardDef(selected.defId).token === need;
+    if (!selectedOk) return `#handCards .hand-card[data-token="${need}"]`;
+    return "#playerActiveZone";
+  }
+
+  if (step.id === "attach_damage") {
+    const selected = game.player.hand.find((x) => x.uid === game.selectedHandUid);
+    const ok = selected?.type === "code" && getCardDef(selected.defId).token === "damage";
+    if (!ok && game.selectedHandUid) return "#playerActiveZone";
+    if (!ok) return '#handCards .hand-card[data-token="damage"]';
+    return "#playerActiveZone";
+  }
+
+  return step.spotlight || null;
+}
+
+function checkTutorialRequire(req) {
+  if (!game) return false;
+  if (req === "hasActive") return Boolean(game.player.active);
+  if (req === "battleStarted") return Boolean(game.flags.battleStarted);
+  if (req === "codeOk") {
+    const st = getSlotCodeStatus(game, "player", "active", 0);
+    return Boolean(st.ok);
+  }
+  if (req === "executed") return Boolean(game.flags.executed);
+  if (req === "attacked") return Boolean(game.flags.attacked);
+  if (req === "selectedChar") {
+    const c = game.player.hand.find((x) => x.uid === game.selectedHandUid);
+    return c?.type === "character";
+  }
+  if (req.startsWith("selectedToken:")) {
+    const tok = req.split(":")[1];
+    const c = game.player.hand.find((x) => x.uid === game.selectedHandUid);
+    return c?.type === "code" && getCardDef(c.defId).token === tok;
+  }
+  if (req.startsWith("hasToken:")) {
+    const tok = req.split(":")[1];
+    const tokens = (game.player.active?.code || []).map((c) => getCardDef(c.defId).token);
+    return tokens.includes(tok);
+  }
+  return false;
 }
 
 function advanceTutorial() {
-  tutorialStep = Math.min(tutorialStep + 1, TUTORIAL.steps.length - 1);
-  const step = TUTORIAL.steps[tutorialStep];
-  if (step) game.lesson = step.text;
+  if (tutorialStep < TUTORIAL.steps.length - 1) {
+    tutorialStep += 1;
+    const step = TUTORIAL.steps[tutorialStep];
+    if (step) game.lesson = step.text;
+  }
 }
 
 function phaseText(ph) {
@@ -349,6 +462,8 @@ function markFocus() {
 }
 
 function startLevel(levelOrTutorial) {
+  hideResultOverlay();
+  hideCoach();
   const cfg = levelOrTutorial === "tutorial" ? TUTORIAL : getLevelConfig(levelOrTutorial);
   tutorialStep = 0;
   currentLevel = cfg.level ?? "tutorial";
@@ -363,21 +478,19 @@ function startLevel(levelOrTutorial) {
     tutorial: cfg.id === "tutorial",
     campaignLevel: cfg.level ?? null,
   });
-  // チュートリアルは専用デッキを強制
   if (cfg.id === "tutorial") {
     game = createGame({
       playerDeck: cfg.playerDeck,
       enemyDeck: cfg.enemyDeck,
       enemyName: cfg.enemyName,
       aiLevel: 0,
-      pointsToWin: 1,
+      pointsToWin: cfg.pointsToWin ?? 99,
       tutorial: true,
       campaignLevel: null,
     });
   }
   currentMode = "battle";
   renderBattle();
-  fxBanner(cfg.title);
 }
 
 function boot() {
@@ -431,10 +544,6 @@ function boot() {
         <button type="button" class="btn btn-ghost btn-sm" id="btnTitle">メニュー</button>
       </div>
       <div class="lesson" id="lesson"></div>
-      <div class="tutorial-tip" id="tutorialTip" hidden>
-        <div class="tip-text"></div>
-        <button type="button" class="btn btn-teal btn-sm" id="btnTipNext">OK</button>
-      </div>
 
       <div class="board">
         <div class="enemy-row field">
@@ -603,40 +712,22 @@ function bind() {
     endPlayerTurn(game);
     renderBattle();
   };
-  document.getElementById("btnTitle").onclick = () => {
-    game = null;
-    currentMode = "title";
-    renderTitle();
-  };
-  document.getElementById("btnTipNext").onclick = () => {
-    const step = TUTORIAL.steps[tutorialStep];
-    if (step?.wait === "tap") advanceTutorial();
-    renderBattle();
-  };
+  document.getElementById("btnTitle").onclick = () => leaveBattleTo("title");
   document.getElementById("btnAgain").onclick = () => {
-    if (game?.tutorial) {
-      currentMode = "campaign";
-      renderCampaign();
-      return;
-    }
+    hideResultOverlay();
     if (game?.campaignLevel) {
       const next = Math.min(30, game.campaignLevel + 1);
       const p = loadProgress();
-      if (p.unlocked >= next) startLevel(next);
-      else {
-        currentMode = "campaign";
-        renderCampaign();
+      if (p.unlocked >= next) {
+        startLevel(next);
+        return;
       }
+      leaveBattleTo("campaign");
       return;
     }
-    currentMode = "title";
-    renderTitle();
+    leaveBattleTo("title");
   };
-  document.getElementById("btnResultTitle").onclick = () => {
-    game = null;
-    currentMode = "title";
-    renderTitle();
-  };
+  document.getElementById("btnResultTitle").onclick = () => leaveBattleTo("title");
 }
 
 boot();
