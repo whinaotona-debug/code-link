@@ -98,18 +98,34 @@ function clampHole(rect) {
 }
 
 function placePanel(targetRect) {
-  panel.classList.remove("coach-panel-top", "coach-panel-bottom", "coach-panel-mid");
+  panel.classList.remove(
+    "coach-panel-top",
+    "coach-panel-bottom",
+    "coach-panel-mid",
+    "coach-panel-left"
+  );
   const mobile = isMobile();
   const vh = window.innerHeight;
 
+  // スマホは常に左寄せ（はみ出し防止）
+  if (mobile) {
+    panel.classList.add("coach-panel-left");
+    if (!targetRect) {
+      panel.classList.add("coach-panel-top");
+      return;
+    }
+    const midY = targetRect.top + targetRect.height / 2;
+    panel.classList.add(midY > vh * 0.5 ? "coach-panel-top" : "coach-panel-bottom");
+    return;
+  }
+
   if (!targetRect) {
-    panel.classList.add(mobile ? "coach-panel-top" : "coach-panel-bottom");
+    panel.classList.add("coach-panel-bottom");
     return;
   }
 
   const midY = targetRect.top + targetRect.height / 2;
-  // 手札・下部UIを指すときはパネルを上へ
-  if (mobile || midY > vh * 0.45) {
+  if (midY > vh * 0.45) {
     panel.classList.add("coach-panel-top");
   } else {
     panel.classList.add("coach-panel-bottom");
