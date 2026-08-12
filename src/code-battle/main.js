@@ -276,9 +276,12 @@ function renderBattle() {
         ? "チュートリアルクリア！"
         : `レベル ${g.campaignLevel} クリア！`
       : "もう一度挑戦しよう";
-    if (win && g.tutorial) completeTutorial();
-    if (win && g.campaignLevel) completeLevel(g.campaignLevel);
-    if (!win && g.campaignLevel) recordLoss();
+    if (!g._progressSaved) {
+      g._progressSaved = true;
+      if (win && g.tutorial) completeTutorial();
+      if (win && g.campaignLevel) completeLevel(g.campaignLevel);
+      if (!win && g.campaignLevel) recordLoss();
+    }
   } else {
     overlay.classList.add("hidden");
   }
